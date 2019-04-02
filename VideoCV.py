@@ -1,52 +1,44 @@
 import cv2
 
 
+WHITE = [255, 255, 255]
+face_cascade = cv2.CascadeClassifier('Haar/haarcascade_frontalcatface.xml')
+eye_cascade = cv2.CascadeClassifier('Haar/haarcascade_eye.xml')
 
-class Camera(object):
-    thread = None  # background thread that reads frames from camera
-    frame = None  # current frame is stored here by background thread
-    last_access = 0  # time of last client access to the camera
 
-    def initialize(self):
-        if Camera.thread is None:
-            # start background frame thread
-            Camera.thread = threading.Thread(target=self._thread)
-            Camera.thread.start()
+def draw_box(Image, x, y, w, h):
+    cv2.line(Image, (x, y), (x + int(w / 5), y), WHITE, 2)
+    cv2.line(Image, (x + int((w / 5) * 4), y), (x + w, y), WHITE, 2)
+    cv2.line(Image, (x, y), (x, y + int(h / 5)), WHITE, 2)
+    cv2.line(Image, (x + w, y), (x + w, y + int(h / 5)), WHITE, 2)
+    cv2.line(Image, (x, (y + int(h / 5 * 4))), (x, y + h), WHITE, 2)
+    cv2.line(Image, (x, (y + h)), (x + int(w / 5), y + h), WHITE, 2)
+    cv2.line(Image, (x + int((w / 5) * 4), y + h), (x + w, y + h), WHITE, 2)
+    cv2.line(Image, (x + w, (y + int(h / 5 * 4))), (x + w, y + h), WHITE, 2)
 
-            # wait until frames start to be available
-            while self.frame is None:
-                time.sleep(0)
+
+class VideoCamera(object):
+    def __init__(self):
+        self.video = cv2.VideoCapture(0)
+
+    def __del__(self):
+        self.video.release()
 
     def get_frame(self):
-        Camera.last_access = time.time()
-        self.initialize()
-        return self.frame
+        success, image = self.video.read()
+        # We are using Motion JPEG, but OpenCV defaults to capture raw images,
+        # so we must encode it into JPEG in order to correctly display the
+        # video stream.
 
-    @classmethod
-    def _thread(cls):
-        with picamera.PiCamera() as camera:
-            # camera setup
-            camera.resolution = (320, 240)
-            camera.hflip = True
-            camera.vflip = True
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+        for (x, y, w, h) in faces:
+           gray_face = cv2.resize((gray[y:y + h, x:x + w]), (110, 110))
+            eyes = eye_cascade.detectMultiScale(gray_face)
+            for (ex, ey, ew, eh) in eyes:
 
-            # let camera warm up
-            #camera.start_preview() 
-            time.sleep(2)
+                draw_box(gray, x, y, w, h)
 
-            stream = io.BytesIO()
-            for foo in camera.capture_continuous(stream, 'jpeg',
-                                                 use_video_port=True):
-                # store frame
-                stream.seek(0)
-                cls.frame = stream.read()
+        ret, jpeg = cv2.imencode('.jpg', gray)
 
-                # reset stream for next frame
-                stream.seek(0)
-                stream.truncate()
-
-                # if there hasn't been any clients asking for frames in
-                # the last 10 seconds stop the thread
-                if time.time() - cls.last_access > 10:
-                    break
-        cls.thread = None
+        return jpeg.tobytes()
