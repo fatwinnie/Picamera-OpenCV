@@ -36,7 +36,7 @@ def cam():
 	#templateData = {time: timeNow}
 	return render_template('camera.html')
 
-def gen():
+def gen(camera):
     """Video streaming generator function."""
     while True:
 		rval,frame=vc.read()
@@ -48,7 +48,7 @@ def gen():
 @app.route('/video_feed')
 def video_feed():
     """Video streaming route. Put this in the src attribute of an img tag."""
-    return Response(gen(Camera()),
+    return Response(gen(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
